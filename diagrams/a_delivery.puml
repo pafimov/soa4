@@ -1,0 +1,39 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam ArrowColor black
+skinparam NoteBackgroundColor white
+skinparam NoteBorderColor black
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+hide footbox
+participant "Банк" as bank
+participant "API" as api
+database "PostgreSQL" as db
+participant "Оркестратор" as o
+queue "RabbitMQ" as q
+participant "Worker" as w
+participant "Push" as p
+actor "Приложение" as app
+bank -> api: Событие и ключ
+api -> db: TX: уведомление, dedup, outbox\nCOMMIT, t0
+api --> bank: 202 и notification_id
+o -> db: TX: ready attempt, срок +5 с\noutbox, COMMIT
+o -> q: ID задачи
+q --> o: Publisher confirm
+o -> db: Outbox опубликован
+q -> w: Задача
+w -> db: Проверка и захват попытки
+note over w,p: Настройки проверены перед send
+w -> p: Push с attempt_id
+p --> w: provider_accepted
+w -> db: Результат попытки
+w -> q: Consumer ACK
+p -> app: Push
+app -> api: ACK(notification_id)
+api -> db: TX: inbox, confirmed\nотмена будущих отправок
+api --> app: 200
+@enduml

@@ -1,0 +1,42 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam ArrowColor black
+skinparam NoteBackgroundColor white
+skinparam NoteBorderColor black
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+hide footbox
+participant "Планировщик" as o
+database "PostgreSQL" as db
+queue "RabbitMQ" as q
+participant "Worker" as w
+participant "SMS" as sms
+participant "API" as api
+actor "Клиент" as app
+note over o,db: Push принят, ACK отсутствует
+o -> db: t0+5 с, TX: проверить успех\npush unknown, SMS ready, outbox\nсрок SMS t0+25 с, COMMIT
+o -> q: SMS-задача
+q --> o: Confirm
+o -> db: Outbox опубликован
+q -> w: Задача
+w -> db: Проверить успех и захватить попытку
+alt Уже подтверждено
+  w -> q: ACK без внешнего вызова
+else Подтверждения нет
+  w -> sms: SMS с attempt_id
+  sms --> w: provider_accepted
+  w -> db: Сохранить результат
+  w -> q: ACK
+  sms -> app: SMS
+  sms -> api: DLR delivered
+  api -> db: TX: inbox, confirmed\nотмена будущих отправок
+  api --> sms: 2xx
+end
+app -> api: Поздний ACK push
+api -> db: Сохранить receipt\nуспех остаётся подтверждённым
+note over api,app: Внешний дубль после начала SMS возможен
+@enduml

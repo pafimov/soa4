@@ -1,0 +1,46 @@
+@startuml
+!pragma layout smetana
+!include <C4/C4_Container>
+LAYOUT_TOP_DOWN()
+UpdateElementStyle("person", $bgColor="white", $fontColor="black", $borderColor="black")
+UpdateElementStyle("system", $bgColor="white", $fontColor="black", $borderColor="black")
+UpdateElementStyle("external_system", $bgColor="#F5F5F5", $fontColor="black", $borderColor="black")
+UpdateElementStyle("container", $bgColor="white", $fontColor="black", $borderColor="black")
+UpdateRelStyle("black", "black")
+skinparam wrapWidth 180
+skinparam ranksep 15
+skinparam nodesep 15
+skinparam monochrome true
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam ArrowColor black
+skinparam NoteBackgroundColor white
+skinparam NoteBorderColor black
+System_Ext(bank, "Сервисы банка", "Операция и outbox")
+Person(app, "Приложение", "Получает push и отправляет ACK")
+System_Boundary(platform, "Критичные уведомления") {
+  Container(api, "API уведомлений", "Go, HTTPS", "Приём, статус, ACK и DLR")
+  ContainerDb(db, "Данные приложения", "PostgreSQL 18", "Dedup, inbox/outbox, попытки и флаг успеха")
+  Container(relay, "Event relay", "Go", "StartWorkflow и Signals")
+  Container(t, "Temporal Server", "Temporal", "Задачи и таймеры")
+  ContainerDb(tdb, "Persistence Temporal", "PostgreSQL 18", "История workflow")
+  Container(wf, "Workflow workers", "Go, Temporal SDK", "Выбор каналов")
+  Container(act, "Activity workers", "Go, Temporal SDK", "Внешние вызовы и журнал попыток")
+}
+System_Ext(profile, "Профиль и настройки", "Контакты и предпочтения")
+System_Ext(provider, "Провайдеры", "Push, SMS, email")
+Rel(bank, api, "Событие и ключ", "HTTPS")
+Rel(app, api, "ACK", "HTTPS")
+Rel(api, db, "Приём, inbox и флаг успеха", "SQL")
+Rel(relay, db, "Outbox и inbox", "SQL")
+Rel(relay, t, "Start / Signal", "gRPC")
+Rel(t, tdb, "История", "SQL")
+Rel(wf, t, "Workflow tasks", "gRPC")
+Rel(act, t, "Activity tasks", "gRPC")
+Rel(act, db, "Попытки и статус", "SQL")
+Rel(act, profile, "Проверка настроек", "gRPC")
+Rel(act, provider, "Отправка", "HTTPS")
+Rel(provider, api, "Подтверждения", "HTTPS")
+@enduml

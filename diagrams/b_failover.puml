@@ -1,0 +1,45 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam ArrowColor black
+skinparam NoteBackgroundColor white
+skinparam NoteBorderColor black
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+hide footbox
+
+participant "Workflow" as wf
+participant "Activity" as act
+database "PostgreSQL" as db
+participant "SMS" as sms
+participant "API" as api
+participant "Relay" as r
+actor "Клиент" as app
+note over wf,db: Push принят, ACK отсутствует
+wf -> wf: Таймер t0+5 с
+wf -> act: SMS, срок t0+25 с
+act -> db: Проверить успех и захватить попытку
+note over act,db: При известном успехе send отменяется
+act -> sms: SMS с attempt_id
+sms --> act: provider_accepted
+act -> db: Сохранить результат
+act --> wf: accepted
+sms -> app: SMS
+sms -> api: DLR delivered
+api -> db: TX: inbox и флаг успеха
+api --> sms: 2xx
+r -> wf: Signal из inbox
+wf -> act: Сохранить confirmed
+act -> db: Проекция confirmed
+act --> wf: Готово
+note over wf: Отмена таймеров и завершение workflow
+app -> api: Поздний ACK push
+api -> db: Поздний receipt
+r -> wf: Signal активному workflow
+wf --> r: Workflow закрыт
+r -> db: Перечитать активный ID\nпри прежнем ID receipt обработан
+note over r,app: Новый workflow не создаётся
+@enduml

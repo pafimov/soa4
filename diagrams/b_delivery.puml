@@ -1,0 +1,44 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam ArrowColor black
+skinparam NoteBackgroundColor white
+skinparam NoteBorderColor black
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+hide footbox
+
+participant "API" as api
+database "PostgreSQL" as db
+participant "Relay" as r
+participant "Workflow" as wf
+participant "Activity" as act
+participant "Push" as p
+actor "Приложение" as app
+[-> api: Событие и ключ
+api -> db: TX: notification, dedup, outbox\nCOMMIT, t0
+[<-- api: 202 и ID
+r -> wf: StartWorkflow(ID) из outbox
+wf --> r: Запуск сохранён
+note over r,wf: Relay повторяет start с прежним ID
+wf -> wf: Таймер t0+5 с
+wf -> act: Отправить push
+act -> db: Проверить успех и захватить попытку
+act -> p: Push с attempt_id
+p --> act: provider_accepted
+act -> db: Сохранить результат
+act --> wf: accepted
+p -> app: Push
+app -> api: ACK(notification_id)
+api -> db: TX: inbox и флаг успеха
+api --> app: 200
+r -> wf: Signal из inbox
+wf -> wf: Отменить таймер
+wf -> act: Сохранить confirmed
+act -> db: Проекция confirmed
+act --> wf: Готово
+note over wf: Workflow завершается
+@enduml
